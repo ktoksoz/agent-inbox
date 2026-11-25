@@ -381,21 +381,16 @@ export const register: Register = (on, options) => {
                     {ago(entry.ts_ms, now)}
                   </Text>
                 </Box>
-                <Box flexShrink={1} minWidth={0} flexDirection="row" columnGap={1}>
+                <Box flexShrink={1} minWidth={0}>
                   <Text bold wrap="truncate-end" maxLines={2}>
                     {entry.title}
                   </Text>
-                  {entry.session_id === state.ownId && <Text dimColor italic>({s.thisSession})</Text>}
                 </Box>
                 <Text italic dimColor wrap="wrap" maxLines={3}>
                   {summaryOf(entry)}
                 </Text>
                 <Box flexDirection="row" flexWrap="wrap" gap={1} marginTop={1}>
-                  {entry.session_id === state.ownId ? (
-                    <Text dimColor italic>
-                      {s.thisSession}
-                    </Text>
-                  ) : entry.link !== '' ? (
+                  {entry.session_id !== state.ownId && entry.link !== '' && (
                     <Button
                       key={`open:${entry.session_id}`}
                       variant="primary"
@@ -403,10 +398,6 @@ export const register: Register = (on, options) => {
                     >
                       {s.open}
                     </Button>
-                  ) : (
-                    <Text dimColor italic>
-                      {s.terminalSession}
-                    </Text>
                   )}
                   <Button key={`copy:${entry.session_id}`} onPress={press => copyResume($, entry, press)}>
                     {s.copy}
@@ -415,6 +406,17 @@ export const register: Register = (on, options) => {
                     {s.remove}
                   </Button>
                 </Box>
+                {entry.session_id === state.ownId ? (
+                  <Text dimColor italic>
+                    {s.thisSession}
+                  </Text>
+                ) : (
+                  entry.link === '' && (
+                    <Text dimColor italic>
+                      {s.terminalSession}
+                    </Text>
+                  )
+                )}
                 <Text dimColor mono size="caption" wrap="truncate-end">
                   claude --resume {entry.session_id}
                 </Text>
