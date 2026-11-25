@@ -9,7 +9,14 @@
       "type": "string",
       "title": "Language",
       "description": "UI language of the inbox pane. 'auto' follows LANG / the macOS system language.",
-      "options": ["auto", "en", "tr", "de", "fr", "es"],
+      "options": [
+        "auto",
+        "en",
+        "tr",
+        "de",
+        "fr",
+        "es"
+      ],
       "default": "auto"
     },
     "autoOpen": {
@@ -24,5 +31,21 @@
       "description": "The JSONL file the hook writes waiting sessions to.",
       "default": "~/.claude/inbox.jsonl"
     }
-  }
+  },
+  "author": {
+    "name": "Koray Toksöz",
+    "url": "https://github.com/ktoksoz"
+  },
+  "homepage": "https://github.com/ktoksoz/agent-inbox",
+  "repository": "https://github.com/ktoksoz/agent-inbox",
+  "keywords": [
+    "inbox",
+    "sessions",
+    "notifications",
+    "permissions",
+    "pane",
+    "hooks",
+    "multi-project"
+  ],
+  "icon": ".claude-plugin/icon.png"
 }
