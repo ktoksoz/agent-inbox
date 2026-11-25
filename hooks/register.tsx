@@ -99,11 +99,11 @@ const ago = (ms: number, now: number): string => {
   const u = t().ago
   const s = Math.max(0, Math.round((now - ms) / 1000))
   if (s < 60) return `${s} ${u.s}`
-  const m = Math.floor(s / 60)
-  if (m < 60) return `${m} ${u.m}`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h} ${u.h} ${m % 60} ${u.m}`
-  return `${Math.floor(h / 24)} ${u.d}`
+  const minutes = Math.floor(s / 60)
+  if (minutes < 60) return `${minutes} ${u.m}`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} ${u.h} ${minutes % 60} ${u.m}`
+  return `${Math.floor(hours / 24)} ${u.d}`
 }
 
 const ageColor = (ms: number, now: number): Color | undefined => {
