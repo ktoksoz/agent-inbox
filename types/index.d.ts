@@ -11,6 +11,8 @@ export type InboxEntry = {
   summary: string
   tool: string
   ts_ms: number
+  /** ISO time of ts_ms; informational. */
+  ts?: string
   entrypoint: string
   pid: number
   /** claude://… deep link of the Claude Desktop session; empty for a terminal session. */

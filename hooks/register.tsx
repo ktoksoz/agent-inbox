@@ -38,10 +38,16 @@ const state = {
 
 const t = () => strings(state.lang)
 
+// What the file may name: ids are plain tokens, a link is exactly the desktop
+// app's session deep link. Anything else is dropped, so a crafted line cannot
+// make the pane run a command with an odd argument or open another URL.
+const SAFE_ID = /^[A-Za-z0-9_.-]{1,128}$/
+const SAFE_LINK = /^claude:\/\/claude\.ai\/epitaxy\/local_[A-Za-z0-9-]{1,80}$/
+
 const isEntry = (v: unknown): v is InboxEntry => {
   if (typeof v !== 'object' || v === null) return false
   const o = v as Record<string, unknown>
-  return typeof o.session_id === 'string' && typeof o.kind === 'string'
+  return typeof o.session_id === 'string' && SAFE_ID.test(o.session_id) && typeof o.kind === 'string'
 }
 
 const normalize = (raw: InboxEntry): InboxEntry => ({
@@ -57,20 +63,29 @@ const normalize = (raw: InboxEntry): InboxEntry => ({
   ts_ms: Number(raw.ts_ms) || 0,
   entrypoint: String(raw.entrypoint ?? ''),
   pid: Number(raw.pid) || 0,
-  link: String(raw.link ?? ''),
+  link: SAFE_LINK.test(String(raw.link ?? '')) ? String(raw.link) : '',
 })
 
-const parse = (text: string): InboxEntry[] =>
-  text.split('\n').flatMap(line => {
+// One entry per session: the last line wins, so a line appended while the
+// lock was busy supersedes the older one until the next locked rewrite.
+const parse = (text: string): InboxEntry[] => {
+  const bySession = new Map<string, InboxEntry>()
+  for (const line of text.split('\n')) {
     const trimmed = line.trim()
-    if (trimmed === '') return []
+    if (trimmed === '') continue
     try {
       const value: unknown = JSON.parse(trimmed)
-      return isEntry(value) ? [normalize(value)] : []
+      if (isEntry(value)) {
+        const entry = normalize(value)
+        bySession.delete(entry.session_id)
+        bySession.set(entry.session_id, entry)
+      }
     } catch {
-      return []
+      // not JSON: skip the line
     }
-  })
+  }
+  return [...bySession.values()]
+}
 
 const summaryOf = (entry: InboxEntry): string => {
   if (entry.summary !== '') return entry.summary
@@ -208,7 +223,7 @@ const goTo = async ($: EngineInterface, entry: InboxEntry, press: UiPressArgumen
 
 const remove = async ($: EngineInterface, entry: InboxEntry) => {
   await $.process
-    .run([state.hookPath, '--remove', entry.session_id], { timeoutMs: 5000 })
+    .run([state.hookPath, '--remove', entry.session_id], { timeoutMs: 5000, env: { CLAUDE_INBOX_FILE: state.inboxPath } })
     .catch(() => undefined)
   state.seen = { size: -1, mtimeMs: -1 }
   await poll($)
@@ -264,7 +279,7 @@ export const register: Register = (on, options) => {
         const entries = (await read($, snapshot)).entries
         for (const entry of entries) {
           await $.process
-            .run([state.hookPath, '--remove', entry.session_id], { timeoutMs: 5000 })
+            .run([state.hookPath, '--remove', entry.session_id], { timeoutMs: 5000, env: { CLAUDE_INBOX_FILE: state.inboxPath } })
             .catch(() => undefined)
         }
         state.seen = { size: -1, mtimeMs: -1 }
