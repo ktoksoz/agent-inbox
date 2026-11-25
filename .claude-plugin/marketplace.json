@@ -1,0 +1,11 @@
+{
+  "name": "agent-inbox",
+  "owner": { "name": "ktoksoz" },
+  "plugins": [
+    {
+      "name": "agent-inbox",
+      "source": "./",
+      "description": "One inbox for every Claude Code session that is waiting on you, grouped by project, with one-click jump to the session."
+    }
+  ]
+}

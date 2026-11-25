@@ -1,0 +1,345 @@
+import { atom, read, update } from 'claude-code'
+import type { Color, EngineInterface, PluginOptions, Register, UiPressArgument } from 'claude-code'
+
+import type { InboxEntry, InboxKind, InboxSnapshot } from '../types'
+import { pickLanguage, strings, type Lang } from './i18n'
+
+const PANE = 'agent-inbox'
+const COMMAND = 'inbox'
+const POLL_MS = 1500
+const CLOCK_MS = 30_000
+
+const EMPTY: InboxSnapshot = { entries: [], readAt: 0, error: '' }
+
+// Change the tag when InboxEntry's fields change: it declines what an earlier
+// version stored, which outlives a reload.
+const snapshot = atom({ plugin: 'agent-inbox', key: 'snapshot' } as const, EMPTY, {
+  shape: 'snapshot-2',
+})
+const clock = atom({ plugin: 'agent-inbox', key: 'clock' } as const, 0)
+
+const KIND_COLOR: Record<InboxKind, Color> = {
+  permission: 'warning',
+  question: 'permission',
+  idle: 'success',
+}
+const KINDS: readonly InboxKind[] = ['permission', 'question', 'idle']
+
+// Module state: starts over at a reload, which only costs one re-read.
+const state = {
+  options: {} as PluginOptions,
+  lang: 'en' as Lang,
+  inboxPath: '',
+  hookPath: '',
+  ownId: '',
+  seen: { size: -1, mtimeMs: -1 },
+  opened: false,
+}
+
+const t = () => strings(state.lang)
+
+const isEntry = (v: unknown): v is InboxEntry => {
+  if (typeof v !== 'object' || v === null) return false
+  const o = v as Record<string, unknown>
+  return typeof o.session_id === 'string' && typeof o.kind === 'string'
+}
+
+const normalize = (raw: InboxEntry): InboxEntry => ({
+  session_id: raw.session_id,
+  host_session_id: String(raw.host_session_id ?? ''),
+  cwd: String(raw.cwd ?? ''),
+  project:
+    String(raw.project ?? '') || String(raw.cwd ?? '').split('/').filter(Boolean).pop() || '?',
+  title: String(raw.title ?? '') || String(raw.project ?? ''),
+  kind: KINDS.includes(raw.kind) ? raw.kind : 'idle',
+  summary: String(raw.summary ?? ''),
+  tool: String(raw.tool ?? ''),
+  ts_ms: Number(raw.ts_ms) || 0,
+  entrypoint: String(raw.entrypoint ?? ''),
+  pid: Number(raw.pid) || 0,
+  link: String(raw.link ?? ''),
+})
+
+const parse = (text: string): InboxEntry[] =>
+  text.split('\n').flatMap(line => {
+    const trimmed = line.trim()
+    if (trimmed === '') return []
+    try {
+      const value: unknown = JSON.parse(trimmed)
+      return isEntry(value) ? [normalize(value)] : []
+    } catch {
+      return []
+    }
+  })
+
+const summaryOf = (entry: InboxEntry): string => {
+  if (entry.summary !== '') return entry.summary
+  const f = t().fallback
+  if (entry.kind === 'permission') return f.permission
+  if (entry.kind === 'question') return entry.tool === 'ExitPlanMode' ? f.planApproval : f.question
+  return f.idle
+}
+
+const ago = (ms: number, now: number): string => {
+  const u = t().ago
+  const s = Math.max(0, Math.round((now - ms) / 1000))
+  if (s < 60) return `${s} ${u.s}`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m} ${u.m}`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h} ${u.h} ${m % 60} ${u.m}`
+  return `${Math.floor(h / 24)} ${u.d}`
+}
+
+const ageColor = (ms: number, now: number): Color | undefined => {
+  const minutes = (now - ms) / 60_000
+  if (minutes >= 30) return 'error'
+  if (minutes >= 10) return 'warning'
+  return undefined
+}
+
+const hhmm = (ms: number): string => {
+  const d = new Date(ms)
+  const two = (n: number) => String(n).padStart(2, '0')
+  return `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`
+}
+
+type Group = { key: string; project: string; cwd: string; entries: InboxEntry[]; oldest: number }
+
+const groupByProject = (entries: InboxEntry[]): Group[] => {
+  const groups = new Map<string, Group>()
+  for (const entry of entries) {
+    const key = entry.cwd || entry.project
+    const group = groups.get(key) ?? {
+      key,
+      project: entry.project,
+      cwd: entry.cwd,
+      entries: [],
+      oldest: Number.POSITIVE_INFINITY,
+    }
+    group.entries.push(entry)
+    group.oldest = Math.min(group.oldest, entry.ts_ms)
+    groups.set(key, group)
+  }
+  const list = [...groups.values()]
+  for (const group of list) group.entries.sort((a, b) => a.ts_ms - b.ts_ms)
+  return list.sort((a, b) => a.oldest - b.oldest)
+}
+
+const resolveLanguage = async ($: EngineInterface) => {
+  const envLocale =
+    (await $.env.get('LC_ALL')) || (await $.env.get('LC_MESSAGES')) || (await $.env.get('LANG'))
+  let systemLocale: string | undefined
+  if (!envLocale && String(state.options.language ?? 'auto') === 'auto') {
+    const info = await $.session.info().catch(() => undefined)
+    if (info?.platform === 'macos') {
+      const ran = await $.process
+        .run(['/usr/bin/defaults', 'read', '-g', 'AppleLanguages'], { timeoutMs: 3000 })
+        .catch(() => undefined)
+      systemLocale = ran?.stdout.match(/"([A-Za-z-]+)"/)?.[1]
+    }
+  }
+  state.lang = pickLanguage(state.options.language, envLocale, systemLocale)
+}
+
+const resolvePaths = async ($: EngineInterface) => {
+  const home = (await $.env.get('HOME')) ?? ''
+  const raw = String(state.options.inboxPath || '~/.claude/inbox.jsonl')
+  state.inboxPath = raw.startsWith('~/') ? `${home}${raw.slice(1)}` : raw
+  state.hookPath = `${$.plugin.root}/scripts/inbox-hook.sh`
+}
+
+const poll = async ($: EngineInterface) => {
+  try {
+    if (state.inboxPath === '') await resolvePaths($)
+    if (!(await $.fs.exists(state.inboxPath))) {
+      if (state.seen.size !== 0) {
+        state.seen = { size: 0, mtimeMs: 0 }
+        await update($, snapshot, () => ({ entries: [], readAt: Date.now(), error: '' }))
+      }
+      return
+    }
+    const stat = await $.fs.stat(state.inboxPath)
+    if (stat.size === state.seen.size && stat.mtimeMs === state.seen.mtimeMs) return
+    state.seen = { size: stat.size, mtimeMs: stat.mtimeMs }
+    const text = await $.fs.read(state.inboxPath)
+    const entries = parse(typeof text === 'string' ? text : '')
+    await update($, snapshot, () => ({ entries, readAt: Date.now(), error: '' }))
+  } catch (err) {
+    state.seen = { size: -1, mtimeMs: -1 }
+    await update($, snapshot, s => ({ ...s, error: String(err) })).catch(() => undefined)
+  }
+}
+
+const openPane = async ($: EngineInterface, focus = false) => {
+  state.opened = true
+  const title = t().title
+  return focus
+    ? $.ui.open({ id: PANE, title, columns: 56, focus: true })
+    : $.ui.open({ id: PANE, title, columns: 56 })
+}
+
+const copyResume = async ($: EngineInterface, entry: InboxEntry, press: UiPressArgument) => {
+  const command = `claude --resume ${entry.session_id}`
+  const copied = await $.ui
+    .copy({ text: command, surface: press.surface })
+    .catch(() => ({ isCopied: false as const, reason: 'error' }))
+  $.ui.toast(copied.isCopied ? t().copied(command) : t().copyFailed(copied.reason, command))
+}
+
+const goTo = async ($: EngineInterface, entry: InboxEntry, press: UiPressArgument) => {
+  if (entry.link !== '') {
+    const info = await $.session.info().catch(() => undefined)
+    if (info?.platform === 'macos') {
+      const ran = await $.process
+        .run(['/usr/bin/open', entry.link], { timeoutMs: 5000 })
+        .catch(err => ({ exitCode: -1, stdout: '', stderr: String(err) }))
+      if (ran.exitCode === 0) {
+        $.ui.toast(t().switching(entry.title))
+        return
+      }
+    }
+    $.ui.toast(t().cannotSwitch)
+  } else {
+    $.ui.toast(t().terminalNoSwitch)
+  }
+  await copyResume($, entry, press)
+}
+
+const remove = async ($: EngineInterface, entry: InboxEntry) => {
+  await $.process
+    .run([state.hookPath, '--remove', entry.session_id], { timeoutMs: 5000 })
+    .catch(() => undefined)
+  state.seen = { size: -1, mtimeMs: -1 }
+  await poll($)
+}
+
+export const register: Register = (on, options) => {
+  state.options = options
+  const autoOpen = options.autoOpen !== false
+
+  on('session.start', async ($, e, next) => {
+    await resolveLanguage($)
+    await resolvePaths($)
+    state.ownId = await $.session.id().catch(() => '')
+    await $.command.register({ name: COMMAND, description: t().commandDescription })
+    $.clock.every(POLL_MS, () => poll($))
+    $.clock.every(CLOCK_MS, () => update($, clock, () => Date.now()))
+    void poll($)
+    // A desktop-hosted session draws nowhere yet at start (surface null); the
+    // pane stays open and is drawn once the desktop page attaches.
+    if (autoOpen && (e.surface === 'desktop' || e.surface === null)) void openPane($)
+    return next(e)
+  })
+
+  on('session.attach', async ($, e, next) => {
+    if (autoOpen && !state.opened && e.surface === 'desktop') void openPane($)
+    return next(e)
+  })
+
+  on('command.run', { command: COMMAND }, async $ => {
+    await openPane($, true)
+    await poll($)
+    return { text: t().paneOpened }
+  })
+
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    const { Box, Text, Button } = $.ui.resolve(e)
+    const s = t()
+    const snap = await read($, snapshot)
+    const tick = await read($, clock)
+    const now = Math.max(tick, snap.readAt, Date.now())
+    const entries = snap.entries.filter(entry => entry.session_id !== state.ownId)
+    const groups = groupByProject(entries)
+
+    if (e.props.placement === 'widget') {
+      return (
+        <Box flexDirection="column" paddingX={1}>
+          <Text bold>{s.title}</Text>
+          <Text dimColor>{entries.length === 0 ? s.none : s.waiting(entries.length)}</Text>
+        </Box>
+      )
+    }
+
+    return (
+      <Box flexDirection="column" paddingX={1} paddingY={1} gap={1}>
+        <Box flexDirection="row" justifyContent="space-between" gap={1}>
+          <Text bold>{entries.length === 0 ? s.none : s.waiting(entries.length)}</Text>
+          <Text dimColor size="caption">
+            {snap.readAt > 0 ? s.updated(hhmm(snap.readAt)) : s.reading}
+          </Text>
+        </Box>
+        {snap.error !== '' && <Text color="error">{s.readError(snap.error)}</Text>}
+        {entries.length === 0 && snap.error === '' && (
+          <Box borderStyle="round" borderDimColor paddingX={1}>
+            <Text dimColor>{s.noneLong}</Text>
+          </Box>
+        )}
+        {groups.map(group => (
+          <Box flexDirection="column" key={`g:${group.key}`}>
+            <Box flexDirection="row" gap={1}>
+              <Text color="claude" bold>
+                ▍
+              </Text>
+              <Text bold size="heading">
+                {group.project}
+              </Text>
+              <Text dimColor>({group.entries.length})</Text>
+            </Box>
+            <Text dimColor size="caption" wrap="truncate-start">
+              {group.cwd}
+            </Text>
+            {group.entries.map(entry => (
+              <Box
+                flexDirection="column"
+                marginTop={1}
+                paddingX={1}
+                borderStyle="round"
+                borderColor={KIND_COLOR[entry.kind]}
+              >
+                <Box flexDirection="row" justifyContent="space-between" gap={1}>
+                  <Button key={`go:${entry.session_id}`} plain onPress={press => goTo($, entry, press)}>
+                    <Text backgroundColor={KIND_COLOR[entry.kind]} color="inverseText" bold>
+                      {` ${s.kind[entry.kind]} `}
+                    </Text>{' '}
+                    <Text bold>{entry.title}</Text>
+                  </Button>
+                  <Text color={ageColor(entry.ts_ms, now)} dimColor={ageColor(entry.ts_ms, now) === undefined} tabular>
+                    {ago(entry.ts_ms, now)}
+                  </Text>
+                </Box>
+                <Text italic dimColor wrap="wrap" maxLines={3}>
+                  {summaryOf(entry)}
+                </Text>
+                <Box flexDirection="row" gap={1} marginTop={1}>
+                  {entry.link !== '' ? (
+                    <Button
+                      key={`open:${entry.session_id}`}
+                      variant="primary"
+                      onPress={press => goTo($, entry, press)}
+                    >
+                      {s.open}
+                    </Button>
+                  ) : (
+                    <Text dimColor italic>
+                      {s.terminalSession}
+                    </Text>
+                  )}
+                  <Button key={`copy:${entry.session_id}`} onPress={press => copyResume($, entry, press)}>
+                    {s.copy}
+                  </Button>
+                  <Button key={`rm:${entry.session_id}`} dimColor onPress={() => remove($, entry)}>
+                    {s.remove}
+                  </Button>
+                </Box>
+                <Text dimColor mono size="caption" wrap="truncate-end">
+                  claude --resume {entry.session_id}
+                </Text>
+              </Box>
+            ))}
+          </Box>
+        ))}
+      </Box>
+    )
+  })
+}
