@@ -24,6 +24,12 @@ type Strings = {
   copied: (command: string) => string
   copyFailed: (reason: string, command: string) => string
   ago: { s: string; m: string; h: string; d: string }
+  usage: string
+  langUsage: (codes: string) => string
+  langSet: (code: string) => string
+  langFailed: (reason: string) => string
+  cleared: (n: number) => string
+  paneClosed: string
 }
 
 const en: Strings = {
@@ -53,6 +59,12 @@ const en: Strings = {
   copied: command => `Copied: ${command}`,
   copyFailed: (reason, command) => `Copy failed (${reason}). Command: ${command}`,
   ago: { s: 's', m: 'min', h: 'h', d: 'd' },
+  usage: 'Usage: /inbox [lang <code> | clear | close | status]',
+  langUsage: codes => `Usage: /inbox lang <code>. Codes: ${codes}`,
+  langSet: code => `Inbox language set to "${code}".`,
+  langFailed: reason => `Could not save the language: ${reason}`,
+  cleared: n => (n === 1 ? 'Dismissed 1 entry.' : `Dismissed ${n} entries.`),
+  paneClosed: 'Inbox pane closed.',
 }
 
 const tr: Strings = {
@@ -82,6 +94,12 @@ const tr: Strings = {
   copied: command => `Kopyalandı: ${command}`,
   copyFailed: (reason, command) => `Kopyalanamadı (${reason}). Komut: ${command}`,
   ago: { s: 'sn', m: 'dk', h: 'sa', d: 'g' },
+  usage: 'Kullanım: /inbox [lang <kod> | clear | close | status]',
+  langUsage: codes => `Kullanım: /inbox lang <kod>. Kodlar: ${codes}`,
+  langSet: code => `Gelen kutusu dili "${code}" olarak ayarlandı.`,
+  langFailed: reason => `Dil kaydedilemedi: ${reason}`,
+  cleared: n => `${n} kayıt kaldırıldı.`,
+  paneClosed: 'Gelen Kutusu paneli kapatıldı.',
 }
 
 const de: Strings = {
@@ -111,6 +129,12 @@ const de: Strings = {
   copied: command => `Kopiert: ${command}`,
   copyFailed: (reason, command) => `Kopieren fehlgeschlagen (${reason}). Befehl: ${command}`,
   ago: { s: 's', m: 'Min', h: 'Std', d: 'T' },
+  usage: 'Aufruf: /inbox [lang <code> | clear | close | status]',
+  langUsage: codes => `Aufruf: /inbox lang <code>. Codes: ${codes}`,
+  langSet: code => `Sprache des Posteingangs auf „${code}“ gesetzt.`,
+  langFailed: reason => `Sprache konnte nicht gespeichert werden: ${reason}`,
+  cleared: n => (n === 1 ? '1 Eintrag entfernt.' : `${n} Einträge entfernt.`),
+  paneClosed: 'Posteingang geschlossen.',
 }
 
 const fr: Strings = {
@@ -140,6 +164,12 @@ const fr: Strings = {
   copied: command => `Copié : ${command}`,
   copyFailed: (reason, command) => `Copie impossible (${reason}). Commande : ${command}`,
   ago: { s: 's', m: 'min', h: 'h', d: 'j' },
+  usage: 'Usage : /inbox [lang <code> | clear | close | status]',
+  langUsage: codes => `Usage : /inbox lang <code>. Codes : ${codes}`,
+  langSet: code => `Langue de la boîte réglée sur « ${code} ».`,
+  langFailed: reason => `Impossible d’enregistrer la langue : ${reason}`,
+  cleared: n => (n === 1 ? '1 entrée retirée.' : `${n} entrées retirées.`),
+  paneClosed: 'Boîte de réception fermée.',
 }
 
 const es: Strings = {
@@ -169,6 +199,12 @@ const es: Strings = {
   copied: command => `Copiado: ${command}`,
   copyFailed: (reason, command) => `No se pudo copiar (${reason}). Comando: ${command}`,
   ago: { s: 's', m: 'min', h: 'h', d: 'd' },
+  usage: 'Uso: /inbox [lang <código> | clear | close | status]',
+  langUsage: codes => `Uso: /inbox lang <código>. Códigos: ${codes}`,
+  langSet: code => `Idioma de la bandeja fijado en «${code}».`,
+  langFailed: reason => `No se pudo guardar el idioma: ${reason}`,
+  cleared: n => (n === 1 ? '1 entrada quitada.' : `${n} entradas quitadas.`),
+  paneClosed: 'Bandeja de entrada cerrada.',
 }
 
 const TABLE: Record<Lang, Strings> = { en, tr, de, fr, es }

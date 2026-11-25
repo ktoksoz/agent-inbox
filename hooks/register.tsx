@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { Color, EngineInterface, PluginOptions, Register, UiPressArgument } from 'claude-code'
 
 import type { InboxEntry, InboxKind, InboxSnapshot } from '../types'
-import { pickLanguage, strings, type Lang } from './i18n'
+import { LANGS, pickLanguage, strings, type Lang } from './i18n'
 
 const PANE = 'agent-inbox'
 const COMMAND = 'inbox'
@@ -222,7 +222,11 @@ export const register: Register = (on, options) => {
     await resolveLanguage($)
     await resolvePaths($)
     state.ownId = await $.session.id().catch(() => '')
-    await $.command.register({ name: COMMAND, description: t().commandDescription })
+    await $.command.register({
+      name: COMMAND,
+      description: t().commandDescription,
+      argumentHint: '[lang <en|tr|de|fr|es> | clear | close | status]',
+    })
     $.clock.every(POLL_MS, () => poll($))
     $.clock.every(CLOCK_MS, () => update($, clock, () => Date.now()))
     void poll($)
@@ -237,10 +241,61 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('command.run', { command: COMMAND }, async $ => {
-    await openPane($, true)
-    await poll($)
-    return { text: t().paneOpened }
+  on('command.run', { command: COMMAND }, async ($, e) => {
+    const [sub = '', ...rest] = (e.args ?? '').trim().split(/\s+/).filter(Boolean)
+    const s = t()
+    switch (sub.toLowerCase()) {
+      case '': {
+        await openPane($, true)
+        await poll($)
+        return { text: s.paneOpened }
+      }
+      case 'lang': {
+        const code = (rest[0] ?? '').toLowerCase()
+        if (!(LANGS as readonly string[]).includes(code)) return { text: s.langUsage(LANGS.join(', ')) }
+        const set = await $.config.set({ key: 'agent-inbox.language', value: code })
+        if (set.deny !== undefined) return { text: s.langFailed(set.deny) }
+        state.lang = code as Lang
+        if (state.opened) await $.ui.open({ id: PANE, title: t().title })
+        return { text: t().langSet(code) }
+      }
+      case 'clear': {
+        await poll($)
+        const entries = (await read($, snapshot)).entries
+        for (const entry of entries) {
+          await $.process
+            .run([state.hookPath, '--remove', entry.session_id], { timeoutMs: 5000 })
+            .catch(() => undefined)
+        }
+        state.seen = { size: -1, mtimeMs: -1 }
+        await poll($)
+        return { text: s.cleared(entries.length) }
+      }
+      case 'close': {
+        await $.ui.close({ id: PANE }).catch(() => undefined)
+        state.opened = false
+        return { text: s.paneClosed }
+      }
+      case 'status': {
+        await poll($)
+        const snap = await read($, snapshot)
+        const now = Date.now()
+        const entries = snap.entries.filter(entry => entry.session_id !== state.ownId)
+        if (entries.length === 0) return { text: s.noneLong }
+        const lines = [s.waiting(entries.length)]
+        for (const group of groupByProject(entries)) {
+          lines.push(`\n${group.project}  (${group.cwd})`)
+          for (const entry of group.entries) {
+            lines.push(`  [${s.kind[entry.kind]}] ${entry.title} · ${ago(entry.ts_ms, now)}`)
+            lines.push(`    ${summaryOf(entry)}`)
+            lines.push(`    claude --resume ${entry.session_id}`)
+          }
+        }
+        return { text: lines.join('\n') }
+      }
+      default:
+        return { text: s.usage }
+    }
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {

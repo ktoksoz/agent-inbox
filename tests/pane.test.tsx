@@ -93,3 +93,21 @@ test('an empty inbox says so', async ($, on) => {
   expect((await ui.find({ type: 'Text', text: /Nichts wartet/ }))?.text).toBe('Nichts wartet')
   await ui.unmount()
 })
+
+test('/inbox status, lang and close answer as text', async ($, on) => {
+  seed(on, FILE, 'en_US.UTF-8')
+  on('config.set', (_, e) => ({ value: e.value }))
+  on('ui.close', () => ({ value: undefined }))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+
+  const status = await $.command.run({ ...RUN, args: 'status' })
+  expect(status.text).toContain('3 sessions waiting')
+  expect(status.text).toContain('[PERMISSION] Demo session')
+  expect(status.text).toContain('claude --resume def')
+
+  expect((await $.command.run({ ...RUN, args: 'lang xx' })).text).toContain('Usage')
+  expect((await $.command.run({ ...RUN, args: 'lang tr' })).text).toContain('"tr"')
+  expect((await $.command.run({ ...RUN, args: 'status' })).text).toContain('3 oturum bekliyor')
+  expect((await $.command.run({ ...RUN, args: 'close' })).text).toBe('Gelen Kutusu paneli kapatıldı.')
+  expect((await $.command.run({ ...RUN, args: 'bogus' })).text).toContain('Kullanım')
+})

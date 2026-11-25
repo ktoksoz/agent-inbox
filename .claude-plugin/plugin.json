@@ -1,6 +1,6 @@
 {
   "name": "agent-inbox",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "One inbox for every Claude Code session that is waiting on you (permission, question, turn finished), grouped by project, with one-click jump to the session.",
   "license": "MIT",
   "types": "./types/index.d.ts",

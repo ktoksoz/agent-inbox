@@ -61,9 +61,19 @@ The hooks are active in that session right away and in every session started aft
 - **Open** switches to the session (Claude Desktop) or copies the resume command (terminal sessions). **Copy** copies `claude --resume <id>`. **Dismiss** removes a card by hand, for example after a session crashed.
 - The pane never lists the session it is drawn in: you are already looking at that one.
 
+### Subcommands
+
+| Command | Effect |
+| --- | --- |
+| `/inbox` | Open (or focus) the pane |
+| `/inbox status` | Print the waiting sessions as text, without the pane |
+| `/inbox lang <code>` | Switch the language (`en`, `tr`, `de`, `fr`, `es`) and save it to the plugin's options |
+| `/inbox clear` | Dismiss every entry |
+| `/inbox close` | Close the pane |
+
 ## Options
 
-Set them with `/plugin configure agent-inbox`, in `/config`, or at install time with `--config key=value`.
+Set them with `/inbox lang <code>` (language only), `/plugin configure agent-inbox`, in `/config`, from a shell with `echo '{"language":"tr"}' | claude plugin configure agent-inbox@agent-inbox --values-stdin`, or at install time with `--config key=value`.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
