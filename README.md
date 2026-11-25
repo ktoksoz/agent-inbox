@@ -1,19 +1,38 @@
 # agent-inbox
 
-One inbox for every Claude Code session that is waiting on you.
+**One inbox for every Claude Code session that is waiting on you.**
 
-When you run many agent sessions across many projects, it is easy to miss the one that stopped to ask for a permission, posed a question, or simply finished its turn. **agent-inbox** collects those moments from *all* your sessions into a single pane beside the chat, grouped by project, oldest first. Click a row to jump to that session.
+Run ten agents across five projects and one of them will stop to ask for a permission, pose a question, or finish its turn while you are looking somewhere else. agent-inbox collects those moments from *all* your sessions into a single pane beside the chat, grouped by project, oldest first. Click **Open** to jump straight to the session.
 
-- Works for every project at once: one user-level install, no per-project setup.
-- Shows what each agent wants from you: permission request (with the tool and command), a question (AskUserQuestion / plan approval), or "turn finished, waiting for input", plus how long it has been waiting.
-- One record per session: it appears when the agent waits, disappears when you answer or the session ends.
-- Jump to the session: in Claude Desktop (Code tab) the row opens that session; for terminal sessions the pane shows and copies `claude --resume <id>`.
-- Languages: English, Türkçe, Deutsch, Français, Español (auto-detected, or set in the plugin's options).
+![The agent-inbox pane in Claude Desktop, listing waiting sessions grouped by project](docs/screenshot.png)
 
-## How it works
+## What it shows
 
-1. **Hooks** (declared in `hooks/hooks.json`, run `scripts/inbox-hook.sh`) fire on `PermissionRequest`, `Notification`, `PreToolUse` (AskUserQuestion / ExitPlanMode) and `Stop`, and write one JSON line per waiting session to `~/.claude/inbox.jsonl`: session id, project folder, session title, kind, a short summary, a timestamp and, for Claude Desktop sessions, the app's deep link. `UserPromptSubmit`, `PostToolUse`, `PermissionDenied`, `SessionStart` and `SessionEnd` remove the record. Writes are serialised with a lock; the script always exits 0 and takes about 50 ms.
-2. **The pane** (`hooks/register.tsx`, a Claude Code function-hooks module) polls the file every 1.5 s, redraws when it changes, groups entries by project and sorts by waiting time. `/inbox` opens it; in Claude Desktop it opens by itself (`autoOpen` option).
+Each card is one session that is waiting on you:
+
+| Badge | Meaning | Where it comes from |
+| --- | --- | --- |
+| **PERMISSION** | The agent asked to run a tool and is waiting for your approval | `PermissionRequest` / `Notification` hooks |
+| **QUESTION** | The agent asked you a question or wants its plan approved | `PreToolUse` on `AskUserQuestion` / `ExitPlanMode` |
+| **WAITING** | The agent finished its turn and is idle until you reply | `Stop` hook |
+
+Every card carries the session title, the project folder, a one-line summary (the command awaiting approval, the question, or the agent's last sentence), and how long it has been waiting. Waits over 10 minutes turn amber, over 30 minutes red.
+
+A card disappears as soon as you answer (next prompt, permission decision, question answer) or the session ends. Each session has at most one card.
+
+## Features
+
+- **One install, every project.** The plugin's own hooks run in all your sessions at user scope. Nothing to add per project.
+- **Jump to the session.** In Claude Desktop (Code tab) **Open** switches to that session. For terminal sessions the card shows `claude --resume <id>` and **Copy** puts it on your clipboard.
+- **Live.** The pane re-reads the inbox file within 1.5 s of any change and refreshes waiting times every 30 s.
+- **Safe hooks.** The hook script takes about 50 ms, serialises concurrent writes with a lock, and always exits 0, so it can never block an agent.
+- **Languages.** English, Türkçe, Deutsch, Français, Español. Auto-detected from `LANG` or the macOS system language, or set explicitly.
+
+## Requirements
+
+- Claude Code 2.1.330 or newer (function-hook mods) on macOS or Linux.
+- `jq` on the PATH (preinstalled on macOS 15+; `brew install jq` or `apt install jq` otherwise).
+- Jumping to a session needs Claude Desktop on macOS; everything else works in the terminal too.
 
 ## Install
 
@@ -23,53 +42,89 @@ At the prompt of a terminal Claude Code session:
 /plugin install agent-inbox --marketplace ktoksoz/agent-inbox
 ```
 
+Answer `y` to add the marketplace, then pick the **user** scope so the hooks run in every project.
+
 From a shell:
 
 ```
-claude plugin install agent-inbox --marketplace ktoksoz/agent-inbox
+claude plugin install agent-inbox --marketplace ktoksoz/agent-inbox --scope user
 ```
 
 In the Claude desktop app, where `/plugin` does not run: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `ktoksoz/agent-inbox`, then **Add plugin**.
 
-Choose the **user** scope so the hooks run in every project. Requires `jq` (preinstalled on macOS 15+; `brew install jq` / `apt install jq` otherwise).
+The hooks are active in that session right away and in every session started afterwards.
+
+## Usage
+
+- In Claude Desktop the pane opens by itself when a session starts (`autoOpen`). Close it with the pane's **×**; `/inbox` brings it back.
+- In a terminal session, `/inbox` opens it inline above the prompt (docked beside the transcript in fullscreen mode).
+- **Open** switches to the session (Claude Desktop) or copies the resume command (terminal sessions). **Copy** copies `claude --resume <id>`. **Dismiss** removes a card by hand, for example after a session crashed.
+- The pane never lists the session it is drawn in: you are already looking at that one.
 
 ## Options
 
+Set them with `/plugin configure agent-inbox`, in `/config`, or at install time with `--config key=value`.
+
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `language` | `auto` | `auto`, `en`, `tr`, `de`, `fr`, `es`. `auto` reads `LANG`, then the macOS system language. |
-| `autoOpen` | `true` | Open the pane when a Claude Desktop session starts. |
-| `inboxPath` | `~/.claude/inbox.jsonl` | Where the hook writes. |
+| `language` | `auto` | `auto`, `en`, `tr`, `de`, `fr`, `es`. `auto` reads `LC_ALL`/`LC_MESSAGES`/`LANG`, then the macOS system language, and falls back to English. |
+| `autoOpen` | `true` | Open the pane when a Claude Desktop session starts. Terminal sessions never open it unasked. |
+| `inboxPath` | `~/.claude/inbox.jsonl` | The file the hook writes and the pane reads. |
 
-Set them with `/plugin configure agent-inbox` or `claude plugin install … --config language=tr`.
+## How it works
+
+```
+ every session ──hooks──▶ scripts/inbox-hook.sh ──▶ ~/.claude/inbox.jsonl ──▶ pane (hooks/register.tsx)
+                 Stop, PermissionRequest,        one JSON line per           polls the file, groups by
+                 PreToolUse, Notification …      waiting session             project, draws the cards
+```
+
+1. `hooks/hooks.json` declares classic command hooks for `Notification`, `PermissionRequest`, `PermissionDenied`, `PreToolUse` (AskUserQuestion, ExitPlanMode), `PostToolUse`, `Stop`, `UserPromptSubmit`, `SessionStart` and `SessionEnd`. They all run `scripts/inbox-hook.sh`.
+2. The script reads the hook payload from stdin, decides whether the session is now waiting (and why) or no longer waiting, and rewrites `inbox.jsonl` under a `mkdir` lock: the session's old line is dropped, the new one appended, and lines of sessions whose process is gone are pruned. A Claude Desktop session is recognised by `CLAUDE_CODE_HOST_SESSION_ID`, which becomes the card's deep link; the session title comes from `~/.claude/sessions/<pid>.json`.
+3. `hooks/register.tsx` is a Claude Code function-hooks module. It registers `/inbox`, opens the pane, polls the file every 1.5 s with `$.fs.stat`, keeps the parsed entries in `$.state`, and draws the cards from them. **Open** runs `open claude://…` through `$.process.run`.
+
+### Inbox file format
+
+One JSON object per line:
+
+```json
+{"session_id":"3f9c…","host_session_id":"local_9a1c…","cwd":"/Users/alex/Projects/storefront",
+ "project":"storefront","title":"Checkout flow refactor","kind":"permission",
+ "summary":"Bash: npm run build && npm test","tool":"Bash","ts_ms":1795600000000,
+ "ts":"2026-11-25T08:26:40Z","entrypoint":"claude-desktop","pid":92245,
+ "link":"claude://claude.ai/epitaxy/local_9a1c…"}
+```
+
+`kind` is `permission`, `question` or `idle`. `host_session_id` and `link` are empty for terminal sessions. Other tools can read the file too; it is plain JSONL.
 
 ## Limitations
 
-- Jumping to a session works for Claude Desktop (Code tab) sessions on macOS, through the app's `claude://` link. Terminal sessions cannot be focused from the pane; their `claude --resume <id>` command is shown and copied instead.
-- Chats outside the Code tab (the regular Claude chat, claude.ai) have no hooks and never appear.
-- A session that crashes without `SessionEnd` is pruned when its process is gone; a stale record can also be dismissed from the pane.
+- Switching to a session works for Claude Desktop (Code tab) sessions on macOS, through the app's `claude://` link. Terminal sessions cannot be focused from the pane; their resume command is shown and copied instead.
+- Chats outside the Code tab (the regular Claude chat, claude.ai) run no hooks and never appear.
+- Sessions started before the plugin was installed only pick the hooks up at their next start.
+- In Claude Desktop the pane needs the session to attach its page; a session hosted headlessly (`claude -p`, the SDK) records to the file but draws nothing.
 
 ## Uninstall
 
 ```
-claude plugin uninstall agent-inbox
+claude plugin uninstall agent-inbox@agent-inbox
 ```
 
-Then delete `~/.claude/inbox.jsonl` if you like. Nothing else is written outside the plugin folder.
+Then delete `~/.claude/inbox.jsonl` if you like. The plugin writes nothing else outside its own folder.
 
 ## Development
 
 ```
-claude plugin validate .
-claude plugin test .
+git clone https://github.com/ktoksoz/agent-inbox
+claude --plugin-dir ./agent-inbox     # load it for one session, hot-reloading on save
+claude plugin validate ./agent-inbox  # manifest, hooks and types
+claude plugin test ./agent-inbox      # the pane tests in tests/
 ```
 
-The hook script can be exercised alone: pipe a hook payload into `scripts/inbox-hook.sh`, or run `scripts/inbox-hook.sh --remove <session_id>`. Touch `~/.claude/inbox.debug` to log every payload it receives to `~/.claude/inbox-debug.log`.
+Exercise the hook script alone by piping a hook payload into `scripts/inbox-hook.sh`, or run `scripts/inbox-hook.sh --remove <session_id>`. Create `~/.claude/inbox.debug` to log every payload it receives to `~/.claude/inbox-debug.log`. `docs/demo-inbox.jsonl` is a sample inbox with fictional sessions; point `inboxPath` at it to see a populated pane.
 
----
+Translations live in `hooks/i18n.ts`; a new language is one more entry in the table.
 
-## Türkçe
+## License
 
-Aynı anda birçok projede birçok agent oturumu çalıştırırken hangisinin sizden bir şey beklediğini (izin, soru, turunu bitirip girdi bekleme) sohbetin yanında duran tek bir panelde, proje bazında ve en eski bekleyen üstte görürsünüz. Satıra tıklayınca Claude Desktop'taki o oturuma geçilir; terminal oturumları için `claude --resume <id>` komutu gösterilir ve panoya kopyalanır.
-
-Kurulum (terminaldeki bir Claude Code oturumunda): `/plugin install agent-inbox --marketplace ktoksoz/agent-inbox`, kapsam olarak **user** seçin. Dil `language` seçeneğiyle (`tr`) ayarlanır; `auto` sistem dilini kullanır. Kaldırma: `claude plugin uninstall agent-inbox`.
+MIT
