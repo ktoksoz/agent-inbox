@@ -263,7 +263,7 @@ export const register: Register = (on, options) => {
 
     return (
       <Box flexDirection="column" paddingX={1} paddingY={1} gap={1}>
-        <Box flexDirection="row" justifyContent="space-between" gap={1}>
+        <Box flexDirection="row" flexWrap="wrap" justifyContent="space-between" columnGap={2}>
           <Text bold>{entries.length === 0 ? s.none : s.waiting(entries.length)}</Text>
           <Text dimColor size="caption">
             {snap.readAt > 0 ? s.updated(hhmm(snap.readAt)) : s.reading}
@@ -297,21 +297,28 @@ export const register: Register = (on, options) => {
                 borderStyle="round"
                 borderColor={KIND_COLOR[entry.kind]}
               >
-                <Box flexDirection="row" justifyContent="space-between" gap={1}>
-                  <Button key={`go:${entry.session_id}`} plain onPress={press => goTo($, entry, press)}>
-                    <Text backgroundColor={KIND_COLOR[entry.kind]} color="inverseText" bold>
-                      {` ${s.kind[entry.kind]} `}
-                    </Text>{' '}
-                    <Text bold>{entry.title}</Text>
-                  </Button>
-                  <Text color={ageColor(entry.ts_ms, now)} dimColor={ageColor(entry.ts_ms, now) === undefined} tabular>
+                <Box flexDirection="row" justifyContent="space-between" columnGap={1}>
+                  <Text color={KIND_COLOR[entry.kind]} bold>
+                    ● {s.kind[entry.kind]}
+                  </Text>
+                  <Text
+                    color={ageColor(entry.ts_ms, now)}
+                    dimColor={ageColor(entry.ts_ms, now) === undefined}
+                    tabular
+                    wrap="truncate-end"
+                  >
                     {ago(entry.ts_ms, now)}
+                  </Text>
+                </Box>
+                <Box flexShrink={1} minWidth={0}>
+                  <Text bold wrap="truncate-end" maxLines={2}>
+                    {entry.title}
                   </Text>
                 </Box>
                 <Text italic dimColor wrap="wrap" maxLines={3}>
                   {summaryOf(entry)}
                 </Text>
-                <Box flexDirection="row" gap={1} marginTop={1}>
+                <Box flexDirection="row" flexWrap="wrap" gap={1} marginTop={1}>
                   {entry.link !== '' ? (
                     <Button
                       key={`open:${entry.session_id}`}
