@@ -30,6 +30,7 @@ type Strings = {
   langFailed: (reason: string) => string
   cleared: (n: number) => string
   paneClosed: string
+  thisSession: string
 }
 
 const en: Strings = {
@@ -65,6 +66,7 @@ const en: Strings = {
   langFailed: reason => `Could not save the language: ${reason}`,
   cleared: n => (n === 1 ? 'Dismissed 1 entry.' : `Dismissed ${n} entries.`),
   paneClosed: 'Inbox pane closed.',
+  thisSession: 'this session',
 }
 
 const tr: Strings = {
@@ -100,6 +102,7 @@ const tr: Strings = {
   langFailed: reason => `Dil kaydedilemedi: ${reason}`,
   cleared: n => `${n} kayıt kaldırıldı.`,
   paneClosed: 'Gelen Kutusu paneli kapatıldı.',
+  thisSession: 'bu oturum',
 }
 
 const de: Strings = {
@@ -135,6 +138,7 @@ const de: Strings = {
   langFailed: reason => `Sprache konnte nicht gespeichert werden: ${reason}`,
   cleared: n => (n === 1 ? '1 Eintrag entfernt.' : `${n} Einträge entfernt.`),
   paneClosed: 'Posteingang geschlossen.',
+  thisSession: 'diese Sitzung',
 }
 
 const fr: Strings = {
@@ -170,6 +174,7 @@ const fr: Strings = {
   langFailed: reason => `Impossible d’enregistrer la langue : ${reason}`,
   cleared: n => (n === 1 ? '1 entrée retirée.' : `${n} entrées retirées.`),
   paneClosed: 'Boîte de réception fermée.',
+  thisSession: 'cette session',
 }
 
 const es: Strings = {
@@ -205,6 +210,7 @@ const es: Strings = {
   langFailed: reason => `No se pudo guardar el idioma: ${reason}`,
   cleared: n => (n === 1 ? '1 entrada quitada.' : `${n} entradas quitadas.`),
   paneClosed: 'Bandeja de entrada cerrada.',
+  thisSession: 'esta sesión',
 }
 
 const TABLE: Record<Lang, Strings> = { en, tr, de, fr, es }

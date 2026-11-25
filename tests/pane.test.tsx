@@ -55,18 +55,20 @@ const seed = (on: On, text: string, lang = '') => {
   on('fs.read', () => ({ value: text }))
 }
 
-test('lists waiting sessions by project, oldest first, own session hidden (English via LANG)', async ($, on) => {
+test('lists waiting sessions by project, oldest first, own session marked (English via LANG)', async ($, on) => {
   seed(on, FILE, 'en_US.UTF-8')
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await $.command.run(RUN)
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect((await ui.find({ type: 'Text', text: /3 sessions waiting/ }))?.text).toBe('3 sessions waiting')
+    expect((await ui.find({ type: 'Text', text: /4 sessions waiting/ }))?.text).toBe('4 sessions waiting')
     expect(await ui.find({ key: 'open:abc' })).toBeDefined()
     expect(await ui.find({ key: 'copy:def' })).toBeDefined()
     expect(await ui.find({ key: 'open:def' })).toBeUndefined()
-    expect(await ui.find({ key: 'copy:self-id' })).toBeUndefined()
+    expect(await ui.find({ key: 'open:self-id' })).toBeUndefined()
+    expect(await ui.find({ key: 'copy:self-id' })).toBeDefined()
+    expect((await ui.find({ type: 'Text', text: /^this session$/ }))?.text).toBe('this session')
     expect((await ui.find({ type: 'Text', text: /Demo session/ }))?.text).toBe('Demo session')
     expect((await ui.find({ type: 'Text', text: /Bash: rm -rf x/ }))?.text).toBe('Bash: rm -rf x')
     expect((await ui.find({ type: 'Text', text: /plan approval/ }))?.text).toBe('Waiting for plan approval')
@@ -80,7 +82,7 @@ test('the language option wins over the locale', { options: { language: 'tr' } }
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await $.command.run(RUN)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text', text: /3 oturum bekliyor/ }))?.text).toBe('3 oturum bekliyor')
+  expect((await ui.find({ type: 'Text', text: /4 oturum bekliyor/ }))?.text).toBe('4 oturum bekliyor')
   expect((await ui.find({ type: 'Text', text: /Plan onayı/ }))?.text).toBe('Plan onayı bekliyor')
   await ui.unmount()
 })
@@ -101,13 +103,14 @@ test('/inbox status, lang and close answer as text', async ($, on) => {
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
 
   const status = await $.command.run({ ...RUN, args: 'status' })
-  expect(status.text).toContain('3 sessions waiting')
+  expect(status.text).toContain('4 sessions waiting')
+  expect(status.text).toContain('Me (this session)')
   expect(status.text).toContain('[PERMISSION] Demo session')
   expect(status.text).toContain('claude --resume def')
 
   expect((await $.command.run({ ...RUN, args: 'lang xx' })).text).toContain('Usage')
   expect((await $.command.run({ ...RUN, args: 'lang tr' })).text).toContain('"tr"')
-  expect((await $.command.run({ ...RUN, args: 'status' })).text).toContain('3 oturum bekliyor')
+  expect((await $.command.run({ ...RUN, args: 'status' })).text).toContain('4 oturum bekliyor')
   expect((await $.command.run({ ...RUN, args: 'close' })).text).toBe('Gelen Kutusu paneli kapatıldı.')
   expect((await $.command.run({ ...RUN, args: 'bogus' })).text).toContain('Kullanım')
 })

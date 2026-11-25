@@ -59,7 +59,7 @@ The hooks are active in that session right away and in every session started aft
 - In Claude Desktop the pane opens by itself when a session starts (`autoOpen`). Close it with the pane's **×**; `/inbox` brings it back.
 - In a terminal session, `/inbox` opens it inline above the prompt (docked beside the transcript in fullscreen mode).
 - **Open** switches to the session (Claude Desktop) or copies the resume command (terminal sessions). **Copy** copies `claude --resume <id>`. **Dismiss** removes a card by hand, for example after a session crashed.
-- The pane never lists the session it is drawn in: you are already looking at that one.
+- The session the pane is drawn in is listed too, marked *this session*, without an **Open** button; the count is the same in every session.
 
 ### Subcommands
 

@@ -295,13 +295,14 @@ export const register: Register = (on, options) => {
         await poll($)
         const snap = await read($, snapshot)
         const now = Date.now()
-        const entries = snap.entries.filter(entry => entry.session_id !== state.ownId)
+        const entries = snap.entries
         if (entries.length === 0) return { text: s.noneLong }
         const lines = [s.waiting(entries.length)]
         for (const group of groupByProject(entries)) {
           lines.push(`\n${group.project}  (${group.cwd})`)
           for (const entry of group.entries) {
-            lines.push(`  [${s.kind[entry.kind]}] ${entry.title} · ${ago(entry.ts_ms, now)}`)
+            const own = entry.session_id === state.ownId ? ` (${s.thisSession})` : ''
+            lines.push(`  [${s.kind[entry.kind]}] ${entry.title}${own} · ${ago(entry.ts_ms, now)}`)
             lines.push(`    ${summaryOf(entry)}`)
             lines.push(`    claude --resume ${entry.session_id}`)
           }
@@ -319,7 +320,7 @@ export const register: Register = (on, options) => {
     const snap = await read($, snapshot)
     const tick = await read($, clock)
     const now = Math.max(tick, snap.readAt, Date.now())
-    const entries = snap.entries.filter(entry => entry.session_id !== state.ownId)
+    const entries = snap.entries
     const groups = groupByProject(entries)
 
     if (e.props.placement === 'widget') {
@@ -380,16 +381,21 @@ export const register: Register = (on, options) => {
                     {ago(entry.ts_ms, now)}
                   </Text>
                 </Box>
-                <Box flexShrink={1} minWidth={0}>
+                <Box flexShrink={1} minWidth={0} flexDirection="row" columnGap={1}>
                   <Text bold wrap="truncate-end" maxLines={2}>
                     {entry.title}
                   </Text>
+                  {entry.session_id === state.ownId && <Text dimColor italic>({s.thisSession})</Text>}
                 </Box>
                 <Text italic dimColor wrap="wrap" maxLines={3}>
                   {summaryOf(entry)}
                 </Text>
                 <Box flexDirection="row" flexWrap="wrap" gap={1} marginTop={1}>
-                  {entry.link !== '' ? (
+                  {entry.session_id === state.ownId ? (
+                    <Text dimColor italic>
+                      {s.thisSession}
+                    </Text>
+                  ) : entry.link !== '' ? (
                     <Button
                       key={`open:${entry.session_id}`}
                       variant="primary"
