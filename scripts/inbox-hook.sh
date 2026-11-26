@@ -112,6 +112,9 @@ if [ "$action" != "clear" ]; then
         {action:"set", kind:"idle", tool:"",
          summary:((.last_assistant_message // "") | clean)}
       elif ($ev | IN("UserPromptSubmit","SessionEnd","SessionStart")) then {action:"clear"}
+      elif $ev == "PostToolUse" and (.tool_name // "") == "mcp__ccd_turn__wrap_up" and ((.tool_input.ask // "") | tostring) != "" then
+        # Claude Desktop next-step box: the turn ends with a question for the user.
+        {action:"set", kind:"question", tool:"wrap_up", summary:((.tool_input.ask // "") | clean)}
       elif ($ev | IN("PostToolUse","PermissionDenied")) then {action:"answered", tool:(.tool_name // "")}
       else {action:"none"} end
   ' 2>/dev/null) || exit 0
@@ -148,6 +151,8 @@ case "$action" in
     ;;
   set|set_weak)
     if [ "$action" = "set_weak" ] && [ "$cur_kind" = "permission" ]; then exit 0; fi
+    # Stop follows the wrap_up question in the same turn: keep the question, not "idle".
+    if [ "$kind" = "idle" ] && [ "$cur_kind" = "question" ] && [ "$cur_tool" = "wrap_up" ]; then exit 0; fi
     cwd=$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null); [ -z "$cwd" ] && cwd="$PWD"
     project=$(basename "$cwd")
     # The desktop app's session id is a plain token; anything else is no link.
