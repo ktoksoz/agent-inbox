@@ -1,6 +1,6 @@
 {
   "name": "agent-inbox",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "One inbox for every Claude Code session that is waiting on you (permission, question, turn finished), grouped by project, with one-click jump to the session.",
   "license": "MIT",
   "types": "./types/index.d.ts",
@@ -24,6 +24,12 @@
       "title": "Open pane automatically",
       "description": "Open the inbox pane when a Claude Desktop session starts (terminal sessions use /inbox).",
       "default": true
+    },
+    "showIdle": {
+      "type": "boolean",
+      "title": "Show finished turns",
+      "description": "Also list sessions whose turn finished without asking you anything (kind 'idle'). Off by default: only permissions and questions are shown.",
+      "default": false
     },
     "inboxPath": {
       "type": "string",

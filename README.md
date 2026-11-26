@@ -14,7 +14,7 @@ Each card is one session that is waiting on you:
 | --- | --- | --- |
 | **PERMISSION** | The agent asked to run a tool and is waiting for your approval | `PermissionRequest` / `Notification` hooks |
 | **QUESTION** | The agent asked you a question or wants its plan approved | `PreToolUse` on `AskUserQuestion` / `ExitPlanMode` |
-| **WAITING** | The agent finished its turn and is idle until you reply | `Stop` hook |
+| **WAITING** | The agent finished its turn and is idle until you reply. Hidden unless `showIdle` is on | `Stop` hook |
 
 Every card carries the session title, the project folder, a one-line summary (the command awaiting approval, the question, or the agent's last sentence), and how long it has been waiting. Waits over 10 minutes turn amber, over 30 minutes red.
 
@@ -79,6 +79,7 @@ Set them with `/inbox lang <code>` (language only), `/plugin configure agent-inb
 | --- | --- | --- |
 | `language` | `auto` | `auto`, `en`, `tr`, `de`, `fr`, `es`. `auto` reads `LC_ALL`/`LC_MESSAGES`/`LANG`, then the macOS system language, and falls back to English. |
 | `autoOpen` | `true` | Open the pane when a Claude Desktop session starts. Terminal sessions never open it unasked. |
+| `showIdle` | `false` | Also list sessions whose turn finished without asking you anything. Off, the pane shows only permissions and questions. |
 | `inboxPath` | `~/.claude/inbox.jsonl` | The file the pane reads and dismisses from. The hook script writes `$CLAUDE_INBOX_FILE` or the default, so to move the file for the hooks too, export `CLAUDE_INBOX_FILE` in the environment Claude Code starts with. |
 
 ## How it works

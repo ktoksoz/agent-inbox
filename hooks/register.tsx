@@ -34,6 +34,7 @@ const state = {
   ownId: '',
   seen: { size: -1, mtimeMs: -1 },
   opened: false,
+  showIdle: false,
 }
 
 const t = () => strings(state.lang)
@@ -178,7 +179,9 @@ const poll = async ($: EngineInterface) => {
     if (stat.size === state.seen.size && stat.mtimeMs === state.seen.mtimeMs) return
     state.seen = { size: stat.size, mtimeMs: stat.mtimeMs }
     const text = await $.fs.read(state.inboxPath)
-    const entries = parse(typeof text === 'string' ? text : '')
+    const all = parse(typeof text === 'string' ? text : '')
+    // 'idle' (turn finished) records are hidden unless the showIdle option is on.
+    const entries = state.showIdle ? all : all.filter(entry => entry.kind !== 'idle')
     await update($, snapshot, () => ({ entries, readAt: Date.now(), error: '' }))
   } catch (err) {
     state.seen = { size: -1, mtimeMs: -1 }
@@ -231,6 +234,7 @@ const remove = async ($: EngineInterface, entry: InboxEntry) => {
 
 export const register: Register = (on, options) => {
   state.options = options
+  state.showIdle = options.showIdle === true
   const autoOpen = options.autoOpen !== false
 
   on('session.start', async ($, e, next) => {

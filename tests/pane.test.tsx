@@ -55,7 +55,7 @@ const seed = (on: On, text: string, lang = '') => {
   on('fs.read', () => ({ value: text }))
 }
 
-test('lists waiting sessions by project, oldest first, own session marked (English via LANG)', async ($, on) => {
+test('lists waiting sessions by project, oldest first, own session marked (English via LANG)', { options: { showIdle: true } }, async ($, on) => {
   seed(on, FILE, 'en_US.UTF-8')
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await $.command.run(RUN)
@@ -77,7 +77,21 @@ test('lists waiting sessions by project, oldest first, own session marked (Engli
   }
 })
 
-test('the language option wins over the locale', { options: { language: 'tr' } }, async ($, on) => {
+test('finished turns are hidden by default', async ($, on) => {
+  seed(on, FILE, 'en_US.UTF-8')
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run(RUN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /2 sessions waiting/ }))?.text).toBe('2 sessions waiting')
+  expect(await ui.find({ key: 'copy:def' })).toBeUndefined()
+  expect(await ui.find({ key: 'copy:self-id' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Turn finished/ })).toBeUndefined()
+  expect((await ui.find({ type: 'Text', text: /Bash: rm -rf x/ }))?.text).toBe('Bash: rm -rf x')
+  await ui.unmount()
+  expect((await $.command.run({ ...RUN, args: 'status' })).text).toContain('2 sessions waiting')
+})
+
+test('the language option wins over the locale', { options: { language: 'tr', showIdle: true } }, async ($, on) => {
   seed(on, FILE, 'en_US.UTF-8')
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await $.command.run(RUN)
@@ -96,7 +110,7 @@ test('an empty inbox says so', async ($, on) => {
   await ui.unmount()
 })
 
-test('/inbox status, lang and close answer as text', async ($, on) => {
+test('/inbox status, lang and close answer as text', { options: { showIdle: true } }, async ($, on) => {
   seed(on, FILE, 'en_US.UTF-8')
   on('config.set', (_, e) => ({ value: e.value }))
   on('ui.close', () => ({ value: undefined }))
