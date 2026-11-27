@@ -13,7 +13,7 @@ Each card is one session that is waiting on you:
 | Badge | Meaning | Where it comes from |
 | --- | --- | --- |
 | **PERMISSION** | The agent asked to run a tool and is waiting for your approval | `PermissionRequest` / `Notification` hooks |
-| **QUESTION** | The agent asked you a question, wants its plan approved, or ended its turn with a question in Claude Desktop's next-step box | `PreToolUse` on `AskUserQuestion` / `ExitPlanMode`, `PostToolUse` on the desktop wrap-up tool |
+| **QUESTION** | The agent asked you a question, wants its plan approved, ended its turn with a question in Claude Desktop's next-step box, or its last message ends by asking you something | `PreToolUse` on `AskUserQuestion` / `ExitPlanMode`, `PostToolUse` on the desktop wrap-up tool, `Stop` with a question mark in the closing lines |
 | **WAITING** | The agent finished its turn and is idle until you reply. Hidden unless `showIdle` is on | `Stop` hook |
 
 Every card carries the session title, the project folder, a one-line summary (the command awaiting approval, the question, or the agent's last sentence), and how long it has been waiting. Waits over 10 minutes turn amber, over 30 minutes red.

@@ -109,8 +109,16 @@ if [ "$action" != "clear" ]; then
           {action:"set", kind:"question", tool:"ExitPlanMode", summary:""}
         else {action:"none"} end
       elif $ev == "Stop" then
-        {action:"set", kind:"idle", tool:"",
-         summary:((.last_assistant_message // "") | clean)}
+        # A turn that ends by asking the user something in prose is a question,
+        # not idle: look for a question mark in the tail of the last message,
+        # skipping code and links.
+        ((.last_assistant_message // "") | tostring) as $m
+        | ($m | .[-600:] | split("\n")
+           | map(gsub("^\\s+|\\s+$"; ""))
+           | map(select(test("\\?(\\s|$)") and (test("://|^`") | not)))) as $qs
+        | if ($qs | length) > 0 then
+            {action:"set", kind:"question", tool:"prose", summary:($qs[0] | gsub("\\*\\*|`"; "") | clean)}
+          else {action:"set", kind:"idle", tool:"", summary:($m | clean)} end
       elif ($ev | IN("UserPromptSubmit","SessionEnd","SessionStart")) then {action:"clear"}
       elif $ev == "PostToolUse" and (.tool_name // "") == "mcp__ccd_turn__wrap_up" and ((.tool_input.ask // "") | tostring) != "" then
         # Claude Desktop next-step box: the turn ends with a question for the user.
@@ -152,7 +160,7 @@ case "$action" in
   set|set_weak)
     if [ "$action" = "set_weak" ] && [ "$cur_kind" = "permission" ]; then exit 0; fi
     # Stop follows the wrap_up question in the same turn: keep the question, not "idle".
-    if [ "$kind" = "idle" ] && [ "$cur_kind" = "question" ] && [ "$cur_tool" = "wrap_up" ]; then exit 0; fi
+    if [ "$cur_kind" = "question" ] && [ "$cur_tool" = "wrap_up" ] && { [ "$kind" = "idle" ] || [ "$tool" = "prose" ]; }; then exit 0; fi
     cwd=$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null); [ -z "$cwd" ] && cwd="$PWD"
     project=$(basename "$cwd")
     # The desktop app's session id is a plain token; anything else is no link.
